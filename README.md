@@ -12,7 +12,9 @@ npm ci
 npm start
 ```
 
-Keep your phone and computer on the same Wi-Fi. Scan the terminal QR code with the iPhone Camera and open it in Expo Go. No Mac, Xcode, signing, Expo account, or odds key is required for the default on-device demo. This app uses Expo SDK 58; Expo Go must support that SDK. All native dependencies are Expo Go-compatible modules; no custom development build is required.
+Keep your phone and computer on the same Wi-Fi. Scan the terminal QR code with the iPhone Camera and open it in Expo Go. No Mac, Xcode, signing, Expo account, or odds key is required for the default on-device demo. This app uses **Expo SDK 57**, the physical-device version recommended in [Expo's setup documentation](https://docs.expo.dev/get-started/create-a-project/) during the SDK 58 transition. All native dependencies match SDK 57's bundled versions; no custom development build is required.
+
+If you downloaded the earlier SDK 58 project and Expo Go says it requires a newer version, updating Expo Go again will not fix the project. Stop Metro with **Control+C**, download the updated project into a new folder (preserving the previous folder), run `npm ci` in its `mobile/` folder, then run `npm start -- --clear`. Scan the new QR code. Do not reopen the earlier project from Expo Go's recent history. If you use Git, pull the update instead of downloading another ZIP.
 
 The demo includes fictional NFL prices, expected-value explanations, stake tracking, manual settlement, and ROI. Demo records persist on the device using AsyncStorage. Uninstalling Expo Go or clearing its app data can erase them. The demo uses no backend and never submits a wager. These are illustrative examples, not live recommendations.
 
