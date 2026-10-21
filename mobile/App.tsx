@@ -9,6 +9,7 @@ import { StatusBar } from 'expo-status-bar';
 import { demoFeed, settleDemo, summary, trackDemo, validateStake } from './src/domain';
 import type { Bet, Feed, Pick, Result } from './src/domain';
 import { normalizeURL, request } from './src/api';
+import PickAnalysis from './src/PickAnalysis';
 
 type Settings = { mode: 'demo' | 'api'; url: string };
 const SETTINGS_KEY = 'edgebook.settings.v1';
@@ -45,6 +46,7 @@ function Edgebook() {
   const [bets, setBets] = useState<Bet[]>([]);
   const [refresh, setRefresh] = useState(0);
   const [selected, setSelected] = useState<Pick | null>(null);
+  const [analysisTarget, setAnalysisTarget] = useState<{ pick: Pick; source: Feed['source'] } | null>(null);
   const [stake, setStake] = useState('1');
   const [trackerSource, setTrackerSource] = useState<'demo' | 'live'>('demo');
 
@@ -185,6 +187,8 @@ function Edgebook() {
           </View>
           <Text style={styles.small}>Kickoff · {date(pick.commence_time)}</Text>
           <Text style={styles.small}>Quote · {date(pick.updated_at)}</Text>
+          <Button title="Why this pick? View full analysis" secondary
+            onPress={() => setAnalysisTarget({ pick, source: feed!.source })} />
           <Button title={bets.some(b => b.pick_id === pick.id) ? 'Already tracked' : 'Track recommendation'}
             disabled={disabled || bets.some(b => b.pick_id === pick.id)} onPress={() => { setStake('1'); setSelected(pick); }} />
         </View>)}
@@ -255,6 +259,9 @@ function Edgebook() {
       <Text style={[styles.tabText, tab === item && { color: '#6CF2B1' }]}>{item}</Text>
       <View style={[styles.tabDot, tab === item && { backgroundColor: '#6CF2B1' }]} />
     </Pressable>)}</View>
+    <Modal visible={!!analysisTarget} animationType="slide" onRequestClose={() => setAnalysisTarget(null)}>
+      {analysisTarget && <PickAnalysis pick={analysisTarget.pick} source={analysisTarget.source} onClose={() => setAnalysisTarget(null)} />}
+    </Modal>
     <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => { if (!saving) setSelected(null); }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
         <View style={styles.sheet}>

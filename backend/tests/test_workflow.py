@@ -34,6 +34,30 @@ class WorkflowTests(unittest.TestCase):
         self.events[0]['bookmakers'].pop()
         self.assertEqual(screen(self.events), [])
 
+    def test_reference_evidence_excludes_target_and_reconciles(self):
+        for pick in screen(self.events):
+            audit = pick['analysis']
+            self.assertEqual(audit['model_id'], 'market-consensus-v1')
+            refs = audit['references']
+            self.assertEqual(len(refs), pick['reference_books'])
+            self.assertNotIn(audit['offering_book_key'], [row['key'] for row in refs])
+            for row in refs:
+                implied = 1 / decimal_odds(row['selection_odds'])
+                total = implied + 1 / decimal_odds(row['opponent_odds'])
+                self.assertAlmostEqual(row['no_vig_probability'], implied / total)
+            self.assertEqual(audit['opponent'], 'Kansas City Chiefs')
+
+    def test_reference_snapshot_omits_stale_and_future_quotes(self):
+        template = self.events[0]['bookmakers'][0]
+        for label, minutes in [('stale', -16), ('future', 1)]:
+            extra = copy.deepcopy(template)
+            extra['key'] = label
+            extra['last_update'] = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
+            self.events[0]['bookmakers'].append(extra)
+        pick = next(p for p in screen(self.events) if p['book'] == 'Demo A')
+        self.assertEqual(pick['reference_books'], 3)
+        self.assertFalse({'stale', 'future'} & {row['key'] for row in pick['analysis']['references']})
+
     def test_started_events_and_stale_quotes_excluded(self):
         event = self.events[0]
         event['commence_time'] = (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()

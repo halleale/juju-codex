@@ -8,6 +8,46 @@ import { createInterface } from 'node:readline';
 import { once } from 'node:events';
 import { demoFeed, settleDemo, summary, trackDemo, validateStake } from '../src/domain.ts';
 import { normalizeURL, request } from '../src/api.ts';
+import { analyzePick } from '../src/analysis.ts';
+import { decimalOdds } from '../src/domain.ts';
+
+test('analysis reconciles reference prices and makes expected return reproducible', () => {
+  const pick = demoFeed().picks[0];
+  const analysis = analyzePick(pick);
+  assert.equal(analysis.evidenceVerified, true);
+  assert.ok(Math.abs(analysis.breakEven - 1 / 2.2) < 1e-10);
+  assert.ok(Math.abs(analysis.ev - pick.expected_value) < 1e-10);
+  assert.ok(Math.abs(analysis.fairOdds - (1200 / 11)) < 1e-10);
+  assert.equal(analysis.minimumOdds, 114);
+  assert.ok(pick.probability * decimalOdds(analysis.minimumOdds) - 1 >= .02);
+  assert.ok(pick.probability * decimalOdds(analysis.minimumOdds - 1) - 1 < .02);
+  assert.equal(analysis.scenarios[0].shift, -.02);
+  assert.ok(analysis.scenarios[0].ev < .02);
+  assert.ok(analysis.scenarios[0].ev > 0);
+  assert.equal(analysis.scenarios[1].ev, analysis.ev);
+});
+
+test('analysis refuses to call missing, duplicated, self-referencing or altered evidence verified', () => {
+  const pick = demoFeed().picks[0];
+  assert.equal(analyzePick({ ...pick, analysis: undefined }).evidenceVerified, false);
+  assert.equal(analyzePick({ ...pick, probability: .6 }).evidenceVerified, false);
+  assert.equal(analyzePick({ ...pick, expected_value: .5 }).evidenceVerified, false);
+  const audit = pick.analysis!;
+  const duplicate = [audit.references[0], audit.references[0], audit.references[2]];
+  assert.equal(analyzePick({ ...pick, analysis: { ...audit, references: duplicate } }).evidenceVerified, false);
+  const self = [{ ...audit.references[0], key: audit.offering_book_key }, ...audit.references.slice(1)];
+  assert.equal(analyzePick({ ...pick, analysis: { ...audit, references: self } }).evidenceVerified, false);
+});
+
+test('negative moneyline thresholds and high-probability sensitivity are valid', () => {
+  const pick = { ...demoFeed().picks[0], american_odds: -120, probability: .6, analysis: undefined };
+  const analysis = analyzePick(pick);
+  assert.equal(analysis.minimumOdds, -142);
+  assert.ok(.6 * decimalOdds(analysis.minimumOdds) - 1 >= .02);
+  assert.ok(.6 * decimalOdds(analysis.minimumOdds - 1) - 1 < .02);
+  const extreme = analyzePick({ ...pick, probability: .99 });
+  assert.equal(extreme.scenarios[2].probability, 1);
+});
 
 test('demo lifecycle rejects duplicates and repeat settlement and computes ROI', () => {
   const feed = demoFeed();
@@ -64,6 +104,9 @@ httpd.serve_forever()
     const feed = await request<ReturnType<typeof demoFeed>>(base, '/recommendations');
     assert.equal(feed.source, 'demo');
     const pick = feed.picks[0];
+    const analysis = analyzePick(pick);
+    assert.equal(analysis.evidenceVerified, true);
+    assert.equal(analysis.references.length, 3);
     await request(base, '/bets', { pick_id: pick.id, stake: 2 });
     const bets = await request<Array<{ id: number; status: string; profit: number }>>(base, '/bets');
     assert.equal(bets.length, 1);

@@ -82,6 +82,17 @@ The Linux cloud machine cannot compile SwiftUI or run the iOS simulator. iOS com
 
 ## What the estimate means
 
+In the Expo app, tap **Why this pick? View full analysis** on a recommendation to open its research report. The report includes:
+
+- Why the offered price meets the selection rule, with break-even chance, consensus estimate, and probability difference shown separately from EV.
+- Estimated fair moneyline, minimum whole-number moneyline for the 2% EV screen, and win/loss versus expected return per 100 units.
+- Each reference book's two-sided prices, quote timestamp, implied probability, market overround, and normalized probability after removing margin.
+- An arithmetic reconciliation of reference prices with the reported median and EV. This is not a predictive-confidence rating or an authentication of the provider.
+- Hypothetical sensitivity checks with win probability two percentage points lower/higher; reference-book dispersion is explicitly not a statistical confidence interval.
+- The actual model inputs, missing injury/weather/team-form inputs, lack of historical validation, and reasons the apparent edge could disappear.
+
+On-device demo picks include fictional reference quotes so the complete report works without a backend. The current backend includes the same evidence structure for both demo and live feeds. Older backends remain compatible but are marked as lacking verifiable quote evidence. Research reports cover the currently displayed recommendation; they are not archived with tracker records in this version. No team-performance model or additional sports-data feed was added by this feature.
+
 For each two-outcome market, implied probability is `1 / decimal_odds`; normalize the pair to sum to one to remove margin. Exclude the offering book, then use the median normalized probability of at least three other books. Estimated expected return per staked unit is `probability * decimal_odds - 1`. Show positive estimates of at least 2%, excluding started events and quotes older than 15 minutes. No staking recommendation is made.
 
 This is a **market-consensus price screen**, not a trained forecasting agent. Correlated books, slow quotes, limits, and estimation error can erase an apparent edge. It has no validated profitability claim. A future predictive model needs historical odds, injury/team data, time-correct features, out-of-sample calibration and backtesting, and closing-line evaluation before claiming an advantage. No injury or team-stat inputs are included yet.

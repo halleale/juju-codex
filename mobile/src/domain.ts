@@ -9,6 +9,22 @@ export type Pick = {
   reference_books: number;
   commence_time: string;
   updated_at: string;
+  analysis?: {
+    model_id: string;
+    calculated_at: string;
+    offering_book_key: string;
+    opponent: string;
+    references: ReferenceQuote[];
+  };
+};
+
+export type ReferenceQuote = {
+  key: string;
+  book: string;
+  selection_odds: number;
+  opponent_odds: number;
+  no_vig_probability: number;
+  updated_at: string;
 };
 
 export type Feed = {
@@ -86,6 +102,19 @@ export function demoFeed(): Feed {
       probability, expected_value: probability * decimalOdds(120) - 1,
       reference_books: 3, commence_time: new Date(now.getTime() + 2 * 86400000).toISOString(),
       updated_at: now.toISOString(),
+      analysis: {
+        model_id: 'market-consensus-v1', calculated_at: now.toISOString(),
+        offering_book_key: 'demo-a', opponent: 'Kansas City Chiefs',
+        references: [
+          { key: 'demo-b', book: 'Demo B', selection_odds: 100, opponent_odds: -120 },
+          { key: 'demo-c', book: 'Demo C', selection_odds: 102, opponent_odds: -122 },
+          { key: 'demo-d', book: 'Demo D', selection_odds: 100, opponent_odds: -120 },
+        ].map(quote => {
+          const implied = 1 / decimalOdds(quote.selection_odds);
+          const other = 1 / decimalOdds(quote.opponent_odds);
+          return { ...quote, no_vig_probability: implied / (implied + other), updated_at: now.toISOString() };
+        }),
+      },
     }],
   };
 }

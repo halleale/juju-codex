@@ -37,7 +37,8 @@ def screen(events, now=None):
             total = sum(implied.values())
             books[book['key']] = (book, outcomes, {team: p / total for team, p in implied.items()})
         for key, (book, prices, _) in books.items():
-            others = [entry[2] for other, entry in books.items() if other != key]
+            reference_entries = [(other, entry) for other, entry in books.items() if other != key]
+            others = [entry[2] for _, entry in reference_entries]
             if len(others) < 3:
                 continue
             for team, price in prices.items():
@@ -45,6 +46,7 @@ def screen(events, now=None):
                 ev = probability * decimal_odds(price) - 1
                 if ev < .02:
                     continue
+                opponent = next(name for name in teams if name != team)
                 picks.append({
                     'id': f"{event['id']}:{key}:{team}", 'event_id': event['id'],
                     'matchup': f"{event['away_team']} at {event['home_team']}",
@@ -52,5 +54,18 @@ def screen(events, now=None):
                     'probability': probability, 'expected_value': ev,
                     'reference_books': len(others), 'commence_time': event['commence_time'],
                     'updated_at': book['last_update'],
+                    'analysis': {
+                        'model_id': 'market-consensus-v1',
+                        'calculated_at': now.isoformat(),
+                        'offering_book_key': key,
+                        'opponent': opponent,
+                        'references': [{
+                            'key': other_key, 'book': other_book['title'],
+                            'selection_odds': other_prices[team],
+                            'opponent_odds': other_prices[opponent],
+                            'no_vig_probability': other_probabilities[team],
+                            'updated_at': other_book['last_update'],
+                        } for other_key, (other_book, other_prices, other_probabilities) in reference_entries],
+                    },
                 })
     return sorted(picks, key=lambda pick: pick['expected_value'], reverse=True)
