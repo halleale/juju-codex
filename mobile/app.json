@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "Edgebook",
+    "slug": "edgebook",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": false
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-status-bar"
+    ]
+  }
+}

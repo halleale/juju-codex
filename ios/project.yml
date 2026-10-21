@@ -1,0 +1,24 @@
+name: Edgebook
+options:
+  bundleIdPrefix: com.edgebook
+  deploymentTarget:
+    iOS: '17.0'
+targets:
+  Edgebook:
+    type: application
+    platform: iOS
+    sources: [Edgebook]
+    info:
+      path: Generated/Info.plist
+      properties:
+        UILaunchScreen: {}
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSLocalNetworkUsageDescription: Connect to your development odds API.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.edgebook.app
+        SWIFT_VERSION: '5.0'
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        TARGETED_DEVICE_FAMILY: '1'

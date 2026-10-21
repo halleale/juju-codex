@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+.local/
+.env
+.DS_Store
+ios/*.xcodeproj/
+ios/Generated/
+DerivedData/
+node_modules/
+.expo/
+dist/
