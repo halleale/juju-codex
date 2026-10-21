@@ -4,6 +4,8 @@ An **Expo Go app for NFL pre-game moneyline recommendations and result tracking*
 
 ## Run with Expo Go (recommended)
 
+**[Download the SDK 57 project ZIP](https://github.com/halleale/juju-codex/raw/refs/heads/main/downloads/edgebook-sdk57.zip)**. Unzip it to get the `edgebook-sdk57` folder, then open its `mobile` folder in Terminal. This source archive excludes installed dependencies, credentials, and local tracker records.
+
 Install Node.js 22.13+ (Node 24 recommended) on your computer and the current **Expo Go** app on your iPhone. From the checkout:
 
 ```sh
