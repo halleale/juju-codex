@@ -82,7 +82,7 @@ The Linux cloud machine cannot compile SwiftUI or run the iOS simulator. iOS com
 
 ## What the estimate means
 
-In the Expo app, tap **Why this pick? View full analysis** on a recommendation to open its research report. The report includes:
+In the Expo app, tap **Why this pick? Research & analysis** on a recommendation. **Quick read** explains the price and game-research takeaways in plain language. **Deep dive** adds the reference quotes, probability calculations, historical sample sizes, source details and sensitivity checks. The report includes:
 
 - Why the offered price meets the selection rule, with break-even chance, consensus estimate, and probability difference shown separately from EV.
 - Estimated fair moneyline, minimum whole-number moneyline for the 2% EV screen, and win/loss versus expected return per 100 units.
@@ -91,11 +91,45 @@ In the Expo app, tap **Why this pick? View full analysis** on a recommendation t
 - Hypothetical sensitivity checks with win probability two percentage points lower/higher; reference-book dispersion is explicitly not a statistical confidence interval.
 - The actual model inputs, missing injury/weather/team-form inputs, lack of historical validation, and reasons the apparent edge could disappear.
 
-On-device demo picks include fictional reference quotes so the complete report works without a backend. The current backend includes the same evidence structure for both demo and live feeds. Older backends remain compatible but are marked as lacking verifiable quote evidence. Research reports cover the currently displayed recommendation; they are not archived with tracker records in this version. No team-performance model or additional sports-data feed was added by this feature.
+On-device demo picks include fictional reference quotes and explicitly simulated price history, plus a checklist showing what live research will examine. No current injuries, weather or historical records are invented for demo games. The backend includes the same price evidence for demo and live feeds. Older backends remain compatible but cannot provide the new research endpoint until updated. Research reports cover the currently displayed recommendation; they are not archived with tracker records in this version.
 
 For each two-outcome market, implied probability is `1 / decimal_odds`; normalize the pair to sum to one to remove margin. Exclude the offering book, then use the median normalized probability of at least three other books. Estimated expected return per staked unit is `probability * decimal_odds - 1`. Show positive estimates of at least 2%, excluding started events and quotes older than 15 minutes. No staking recommendation is made.
 
-This is a **market-consensus price screen**, not a trained forecasting agent. Correlated books, slow quotes, limits, and estimation error can erase an apparent edge. It has no validated profitability claim. A future predictive model needs historical odds, injury/team data, time-correct features, out-of-sample calibration and backtesting, and closing-line evaluation before claiming an advantage. No injury or team-stat inputs are included yet.
+This is a **market-consensus price screen**, not a trained forecasting agent. Correlated books, slow quotes, limits, and estimation error can erase an apparent edge. It has no validated profitability claim. A future predictive model needs historical odds, injury/team data, time-correct features, out-of-sample calibration and backtesting, and closing-line evaluation before claiming an advantage. Web research is separate context; it does not change the probability or EV calculation.
+
+## Live web research with OpenAI
+
+The server integrates the [OpenAI Responses API web-search tool](https://developers.openai.com/api/docs/guides/tools-web-search). It requests live search (`web_search`, external web access enabled) and structured output for five topics: team form/efficiency, injuries, weather/venue, rest/travel/matchup situations, and historical statistics. The default model is `gpt-5-mini`; override `EDGEBOOK_RESEARCH_MODEL` only with a model supporting both web search and strict JSON-schema output.
+
+**Required for live use:** securely configure `ODDS_API_KEY` and `EDGEBOOK_RESEARCH_API_KEY` on the Python backend. An OpenAI API account with billing and model access is required; ChatGPT subscriptions do not include API usage. The backend also accepts the conventional `OPENAI_API_KEY` on local machines, but the managed cloud platform reserves that prefix, so its saved secret requirement uses `EDGEBOOK_RESEARCH_API_KEY`. Never put keys into the mobile app or `EXPO_PUBLIC_` variables.
+
+For a local Mac, from a Terminal in the repository root, the following zsh prompts read keys without echoing them or putting their values in command history:
+
+```zsh
+read -s "ODDS_API_KEY?Odds provider API key: "
+export ODDS_API_KEY
+printf '\n'
+read -s "EDGEBOOK_RESEARCH_API_KEY?OpenAI API key: "
+export EDGEBOOK_RESEARCH_API_KEY
+printf '\n'
+EDGEBOOK_HOST=0.0.0.0 python3 -m backend.server
+```
+
+Connect the Expo app to that Mac's LAN API address as described above. Actual live odds are needed: fictional demo games never trigger paid OpenAI searches. In the pick's report, tap **Search latest context**. Opening the report only checks history/status; it does not automatically initiate an OpenAI call. Searches can take around 90 seconds. On your trusted LAN this is still a single-user prototype: the research endpoint has no account authentication and must not be exposed publicly.
+
+Results include clickable source links, retrieval time, reported source context date when available, available historical periods/sample sizes, and separate uncertain/unavailable labels. The backend accepts claim URLs only if they match sources actually returned by web search (or opened search pages). Unsupported sections have their text and numbers replaced with an unavailable message. A matching source URL is **not** independent verification that every statement is entailed by its page. AI summaries can still be inaccurate; users should check sources and dates. The prompt asks for primary sources, timing/venue-aware weather forecasts, historical sample-size caveats, contrary evidence and no unsupported sharp-money or causal claims.
+
+Responses are cached in memory for 15 minutes per game/selection/model. The default persistent rate limit is six new attempts per rolling hour, including failed attempts; set `EDGEBOOK_RESEARCH_MAX_PER_HOUR` to 1–60 if needed. Requests cap built-in tool calls at six and output at 6,500 tokens. These are usage controls, not an exact dollar spending cap; set appropriate provider-side spending controls too. Cache contents are lost on restart, while the hourly-attempt counter persists in SQLite.
+
+`GET /research?pick_id=<encoded ID>` returns status, history and any cached report without a paid search. `POST /research` with `{"pick_id":"..."}` explicitly requests one. Missing credentials return `needs_config`. Demo returns `demo`. Provider errors do not invent results or change the price model. The backend sends matchup, selection, kickoff and request time to OpenAI, not tracker stakes or account information. Responses use `store: false`; provider retention policies still apply.
+
+Live OpenAI and odds-provider access remain **unverified until valid credentials are supplied**. Automated provider-boundary and HTTP tests use explicit fixtures, not real searches. Test live model compatibility, source quality, billing and device behavior after configuration.
+
+## Price trend history
+
+Each live recommendation refresh records all eligible two-sided prices in SQLite, even if a particular quote does not qualify as a pick. Records are keyed by event, book, selection and the vendor's quote timestamp. Repeated polling of an unchanged quote does not create fake movement. Demo records never enter live history.
+
+The report charts implied probability for the offering book and shows first/latest price, change in break-even probability, observation coverage and best recorded payout. The displayed window contains at most the latest 120 captured quotes. One quote is labeled **collecting**, not a trend. Coverage starts when this backend observes prices; it is **not the market opening line**, provider historical coverage or a continuous background feed. Keep the database and refresh prices over time to collect history. Observation-order spacing is labeled because time gaps may differ. No injury cause, sharp-money signal or public betting percentage is inferred from movement alone.
 
 ## Tracking
 
@@ -105,6 +139,7 @@ Track a recommendation with a stake in consistent units; no wager is placed. Rec
 
 - Validate the Expo app in Expo Go on an iPhone; add app icons and production signing for distribution. The optional SwiftUI target also needs an Xcode build check.
 - Configure and verify live odds access; evaluate provider licensing and refresh quotas.
+- Configure and verify live OpenAI research, source quality and billing; fixture tests do not establish live model access or accuracy.
 - Add historical backtests and calibration before offering predictive-model recommendations.
 - Add account authentication, secure hosting, per-user storage, automated result ingestion and settlement correction.
 - Review App Store and jurisdiction requirements before public distribution.

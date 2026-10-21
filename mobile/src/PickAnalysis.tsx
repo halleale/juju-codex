@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Pick } from './domain';
 import { analyzePick } from './analysis';
+import ResearchPanel from './ResearchPanel';
 
 const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
 const signed = (value: number, digits = 1) => `${value >= 0 ? '+' : ''}${value.toFixed(digits)}`;
@@ -24,9 +25,10 @@ function ProbabilityBar({ label, probability, color }: { label: string; probabil
   </View>;
 }
 
-export default function PickAnalysis({ pick, source, onClose }: {
-  pick: Pick; source: 'demo' | 'live'; onClose: () => void;
+export default function PickAnalysis({ pick, source, apiURL, onClose }: {
+  pick: Pick; source: 'demo' | 'live'; apiURL?: string; onClose: () => void;
 }) {
+  const [advanced, setAdvanced] = useState(false);
   let analysis: ReturnType<typeof analyzePick>;
   try { analysis = analyzePick(pick); }
   catch {
@@ -47,6 +49,12 @@ export default function PickAnalysis({ pick, source, onClose }: {
       <Text style={s.title}>{pick.selection}</Text>
       <Text style={s.body}>{pick.matchup}</Text>
       <Text style={s.heroPrice}>{odds(pick.american_odds)} <Text style={s.small}>at {pick.book}</Text></Text>
+      <View style={s.modeRow}>
+        {[false, true].map(deep => <Pressable key={String(deep)} accessibilityRole="button" accessibilityState={{ selected: deep === advanced }}
+          style={[s.modeButton, deep === advanced && { backgroundColor: '#6CF2B1' }]} onPress={() => setAdvanced(deep)}>
+          <Text style={[s.closeText, deep === advanced && { color: '#0A251B' }]}>{deep ? 'Deep dive' : 'Quick read'}</Text>
+        </Pressable>)}
+      </View>
       <View style={s.notice}>
         <Text style={s.noticeTitle}>{source === 'demo' ? 'FICTIONAL DEMO ANALYSIS' : 'MARKET-CONSENSUS ESTIMATE'}</Text>
         <Text style={s.body}>{source === 'demo'
@@ -57,9 +65,12 @@ export default function PickAnalysis({ pick, source, onClose }: {
         <Text style={s.body}>At {odds(pick.american_odds)}, this selection needs to win {pct(analysis.breakEven)} of the time to break even. The reported market-consensus estimate is {pct(pick.probability)}—a difference of {signed(analysis.probabilityEdge * 100)} percentage points.</Text>
         <Text style={s.body}>That produces {signed(analysis.ev * 100)}% estimated expected value, {analysis.ev >= .02 ? 'meeting' : 'falling below'} the 2% selection threshold. {pick.reference_books} other books are reported as references; the offering book is excluded from the estimate.</Text>
         <Text style={s.small}>The selection is about the available price. A team can have less than a 50% estimated win probability and still offer estimated positive value.</Text>
+        {!advanced && <Text style={s.small}>Expected value is the average net return implied by the assumed probability—not a promise about this game's result. It is only useful if that probability estimate is accurate.</Text>}
         <ProbabilityBar label="Break-even probability at this price" probability={analysis.breakEven} color="#869BB3" />
         <ProbabilityBar label="Estimated consensus probability" probability={pick.probability} color="#6CF2B1" />
       </Section>
+      <ResearchPanel pick={pick} source={source} apiURL={apiURL} advanced={advanced} />
+      {advanced && <>
       <Section title="Price, payout & expected return">
         <Row label="Offered moneyline" value={odds(pick.american_odds)} />
         <Row label="Offered decimal odds" value={analysis.decimal.toFixed(3)} />
@@ -103,9 +114,13 @@ export default function PickAnalysis({ pick, source, onClose }: {
         <Text style={s.heading}>Market consensus · v1</Text>
         <Text style={s.body}>Inputs: pre-game NFL two-sided moneylines, sportsbook identity, and quote timestamps. Normalize each reference book's probabilities, exclude the offering book, and use the median estimate from at least three other books.</Text>
         <Text style={s.body}>Selection rules: estimated EV of at least 2%, kickoff still in the future, and offering/reference quotes no more than 15 minutes old when calculated.</Text>
-        <Text style={s.body}>Not included: player injuries, starting lineups, weather, recent team form, efficiency statistics, travel, or historical line movement. There are no independently trained team-performance models in this version.</Text>
+        <Text style={s.body}>This probability model does not use player injuries, starting lineups, weather, team form, efficiency statistics, travel or line history. The separate research panel can investigate context, but it does not adjust these probabilities. There are no independently trained team-performance models in this version.</Text>
         <Text style={s.body}>Validation: no historical calibration, out-of-sample backtest, closing-line evaluation, or demonstrated profitability yet. Book consensus can be correlated or wrong.</Text>
       </Section>
+      </>}
+      {!advanced && <Pressable accessibilityRole="button" onPress={() => setAdvanced(true)} style={s.close}>
+        <Text style={s.closeText}>Open deep dive: prices, math, sample sizes & sources</Text>
+      </Pressable>}
       <Section title="What could invalidate the pick?">
         <Text style={s.body}>• The offered price changes or is unavailable to you.{`\n`}• A quote is stale, or the game has started.{`\n`}• News moves the market after these quotes were captured.{`\n`}• Reference books share the same bias or copy each other's prices.{`\n`}• Sportsbook settlement rules, limits, ties, or voids differ from the two-outcome assumption.</Text>
         <Text style={s.small}>Offered quote · {date(pick.updated_at)}</Text>
@@ -136,4 +151,6 @@ const s = StyleSheet.create({
   noticeTitle: { color: '#F3CF80', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
   close: { padding: 12, backgroundColor: '#233346', borderRadius: 10, minHeight: 44 },
   closeText: { color: '#6CF2B1', fontSize: 14, fontWeight: '700' },
+  modeRow: { flexDirection: 'row', gap: 10 },
+  modeButton: { flex: 1, padding: 14, alignItems: 'center', backgroundColor: '#233346', borderRadius: 12, minHeight: 48 },
 });

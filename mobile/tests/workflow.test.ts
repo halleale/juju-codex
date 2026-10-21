@@ -10,6 +10,21 @@ import { demoFeed, settleDemo, summary, trackDemo, validateStake } from '../src/
 import { normalizeURL, request } from '../src/api.ts';
 import { analyzePick } from '../src/analysis.ts';
 import { decimalOdds } from '../src/domain.ts';
+import { demoResearch, describeTrend } from '../src/research.ts';
+
+test('research demo has explicit simulated history and no fabricated current facts', () => {
+  const report = demoResearch(demoFeed().picks[0]);
+  assert.equal(report.status, 'demo');
+  assert.equal(report.timeline.simulated, true);
+  assert.equal(report.timeline.points.length, 4);
+  assert.equal(report.sections.length, 5);
+  assert.deepEqual(report.sources, []);
+  assert.ok(report.sections.every(section => section.status === 'unavailable' && section.metrics.length === 0));
+  assert.ok(describeTrend(report.timeline.points).change! < 0);
+  assert.equal(describeTrend(report.timeline.points.slice(0, 1)).change, null);
+  const reverse = [...report.timeline.points].reverse();
+  assert.ok(describeTrend(reverse).change! > 0);
+});
 
 test('analysis reconciles reference prices and makes expected return reproducible', () => {
   const pick = demoFeed().picks[0];
@@ -107,6 +122,14 @@ httpd.serve_forever()
     const analysis = analyzePick(pick);
     assert.equal(analysis.evidenceVerified, true);
     assert.equal(analysis.references.length, 3);
+    const researchPath = `/research?pick_id=${encodeURIComponent(pick.id)}`;
+    const preview = await request<ReturnType<typeof demoResearch>>(base, researchPath);
+    assert.equal(preview.status, 'demo');
+    assert.equal(preview.timeline.simulated, true);
+    assert.equal(preview.sections.length, 5);
+    const researched = await request<ReturnType<typeof demoResearch>>(base, '/research', { pick_id: pick.id });
+    assert.equal(researched.status, 'demo');
+    assert.deepEqual(researched.sources, []);
     await request(base, '/bets', { pick_id: pick.id, stake: 2 });
     const bets = await request<Array<{ id: number; status: string; profit: number }>>(base, '/bets');
     assert.equal(bets.length, 1);
@@ -116,6 +139,55 @@ httpd.serve_forever()
     assert.equal(settled[0].status, 'won');
     assert.ok(settled[0].profit > 0);
     await assert.rejects(request(base, '/settle', { bet_id: bets[0].id, status: 'lost' }));
+    lines.close();
+  } finally {
+    const exited = once(child, 'exit');
+    child.kill();
+    await exited;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('live-path research HTTP integration returns cited fixtures without paid network calls', { timeout: 15000 }, async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'edgebook-research-'));
+  const code = `
+from backend import server
+import backend.research as research_module
+from backend.tests.test_research import provider_response
+server.store = server.Store(${JSON.stringify(join(directory, 'test.sqlite3'))})
+events, _ = server.load_events()
+server.load_events = lambda: (events, 'live')
+research_module.search = lambda *args: provider_response()
+httpd = server.ThreadingHTTPServer(('127.0.0.1', 0), server.Handler)
+print(httpd.server_port, flush=True)
+httpd.serve_forever()
+`;
+  const child = spawn('python3', ['-c', code], {
+    cwd: new URL('../../', import.meta.url),
+    env: { ...process.env, ODDS_API_KEY: '', OPENAI_API_KEY: '', EDGEBOOK_RESEARCH_API_KEY: 'test-key-not-real' },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  try {
+    const lines = createInterface({ input: child.stdout });
+    const [line] = await once(lines, 'line');
+    const base = `http://127.0.0.1:${line}`;
+    const feed = await request<ReturnType<typeof demoFeed>>(base, '/recommendations');
+    const pick = feed.picks[0];
+    const path = `/research?pick_id=${encodeURIComponent(pick.id)}`;
+    const preview = await request<ReturnType<typeof demoResearch>>(base, path);
+    assert.equal(preview.status, 'not_requested');
+    assert.equal(preview.timeline.simulated, false);
+    assert.equal(preview.timeline.status, 'collecting');
+    const researched = await request<ReturnType<typeof demoResearch>>(base, '/research', { pick_id: pick.id });
+    assert.equal(researched.status, 'ready');
+    assert.equal(researched.sections.length, 5);
+    assert.equal(researched.sources[0].url, 'https://www.nfl.com/injuries/');
+    assert.ok(researched.sections.every(section => section.source_ids.includes(researched.sources[0].id)));
+    const cached = await request<ReturnType<typeof demoResearch>>(base, path);
+    assert.equal(cached.cached, true);
+    const again = await request<ReturnType<typeof demoFeed>>(base, '/recommendations');
+    assert.equal(again.picks[0].probability, pick.probability);
+    assert.equal(again.picks[0].expected_value, pick.expected_value);
     lines.close();
   } finally {
     const exited = once(child, 'exit');

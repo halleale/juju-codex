@@ -8,13 +8,16 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
+from urllib.parse import parse_qs, urlsplit
 from backend.data import load_events
 from backend.engine import screen
 from backend.store import Store
+from backend.research import Research, ResearchRateLimited
 
 store = None
 cache = None
 cache_lock = threading.Lock()
+research_service = None
 
 
 def recommendations():
@@ -22,6 +25,8 @@ def recommendations():
     with cache_lock:
         if cache is None or time.monotonic() - cache[0] > 60:
             events, source = load_events()
+            if store is not None:
+                store.record_quotes(events, source)
             cache = (time.monotonic(), {
                 'source': source, 'generated_at': datetime.now(timezone.utc).isoformat(),
                 'methodology': 'Median no-vig probability from at least 3 other sportsbooks; 2% estimated EV minimum. Quotes older than 15 minutes excluded. Consensus is not a validated predictive model.',
@@ -50,10 +55,30 @@ class Handler(BaseHTTPRequestHandler):
                 self.reply(200, recommendations())
             elif self.path == '/bets':
                 self.reply(200, store.list())
+            elif urlsplit(self.path).path == '/research':
+                pick_id = parse_qs(urlsplit(self.path).query).get('pick_id', [''])[0]
+                self.research_reply(pick_id, run=False)
             else:
                 self.reply(404, {'error': 'Not found'})
         except (HTTPError, URLError, TimeoutError, OSError, ValueError, KeyError, TypeError):
             self.reply(502, {'error': 'Unable to load odds. Check provider access and quota; no fallback picks were substituted.'})
+
+    def research_reply(self, pick_id, run):
+        global research_service
+        try:
+            feed = recommendations()
+            pick = next((p for p in feed['picks'] if p['id'] == pick_id), None)
+            if not pick or datetime.fromisoformat(pick['commence_time'].replace('Z', '+00:00')) <= datetime.now(timezone.utc):
+                self.reply(400, {'error': 'Recommendation unavailable or started; refresh picks.'})
+                return
+            with cache_lock:
+                if research_service is None:
+                    research_service = Research(store)
+            self.reply(200, research_service.report(pick, feed['source'], run=run))
+        except ResearchRateLimited:
+            self.reply(429, {'error': 'Hourly research request limit reached. Cached reports remain available. Try again later.'})
+        except (HTTPError, URLError, TimeoutError, OSError, ValueError, KeyError, TypeError):
+            self.reply(502, {'error': 'Web research could not complete. Check API key, model access, quota and connectivity. No conclusions were substituted.'})
 
     def do_POST(self):
         try:
@@ -63,7 +88,9 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(self.rfile.read(length))
             if not isinstance(data, dict):
                 raise ValueError('Expected a JSON object')
-            if self.path == '/bets':
+            if self.path == '/research':
+                self.research_reply(data.get('pick_id'), run=True)
+            elif self.path == '/bets':
                 response = recommendations()
                 pick = next((p for p in response['picks'] if p['id'] == data.get('pick_id')), None)
                 if not pick or datetime.fromisoformat(pick['commence_time'].replace('Z', '+00:00')) <= datetime.now(timezone.utc):

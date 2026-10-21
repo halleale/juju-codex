@@ -6,9 +6,9 @@ export function normalizeURL(value: string): string {
   return url.toString().replace(/\/+$/, '');
 }
 
-export async function request<T>(base: string, path: string, body?: object): Promise<T> {
+export async function request<T>(base: string, path: string, body?: object, timeoutMs = 25000): Promise<T> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(normalizeURL(base) + path, {
       method: body ? 'POST' : 'GET',

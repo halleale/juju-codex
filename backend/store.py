@@ -14,6 +14,60 @@ class Store:
                 id INTEGER PRIMARY KEY, pick_id TEXT UNIQUE, matchup TEXT,
                 selection TEXT, book TEXT, american_odds REAL, stake REAL,
                 source TEXT, created_at TEXT, status TEXT DEFAULT 'pending', profit REAL DEFAULT 0)''')
+            db.execute('''CREATE TABLE IF NOT EXISTS quote_history (
+                event_id TEXT, book_key TEXT, selection TEXT, quote_at TEXT,
+                american_odds REAL, no_vig_probability REAL, observed_at TEXT,
+                PRIMARY KEY (event_id, book_key, selection, quote_at))''')
+            db.execute('CREATE TABLE IF NOT EXISTS research_requests (id INTEGER PRIMARY KEY, requested_at REAL)')
+
+    def reserve_research_request(self, limit, now):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            count = db.execute('SELECT COUNT(*) FROM research_requests WHERE requested_at >= ?', (now - 3600,)).fetchone()[0]
+            if count >= limit:
+                return False
+            db.execute('INSERT INTO research_requests (requested_at) VALUES (?)', (now,))
+            db.execute('DELETE FROM research_requests WHERE requested_at < ?', (now - 86400,))
+            return True
+
+    def record_quotes(self, events, source, now=None):
+        """Save genuine pre-game observations; demo data must never enter live history."""
+        if source != 'live':
+            return
+        now = now or datetime.now(timezone.utc)
+        rows = []
+        for event in events:
+            if datetime.fromisoformat(event['commence_time'].replace('Z', '+00:00')) <= now:
+                continue
+            teams = {event['home_team'], event['away_team']}
+            for book in event.get('bookmakers', []):
+                updated = datetime.fromisoformat(book['last_update'].replace('Z', '+00:00')).astimezone(timezone.utc)
+                if not 0 <= (now - updated).total_seconds() <= 900:
+                    continue
+                market = next((m for m in book.get('markets', []) if m['key'] == 'h2h'), None)
+                if not market:
+                    continue
+                prices = {o['name']: o['price'] for o in market['outcomes']}
+                if set(prices) != teams:
+                    continue
+                try:
+                    probabilities = {team: 1 / decimal_odds(price) for team, price in prices.items()}
+                except ValueError:
+                    continue
+                total = sum(probabilities.values())
+                rows.extend((event['id'], book['key'], team, updated.isoformat(), price,
+                             probabilities[team] / total, now.isoformat()) for team, price in prices.items())
+        with self.connect() as db:
+            # Preserve the first observation. Repeated polling of an unchanged vendor quote is not history.
+            db.executemany('INSERT OR IGNORE INTO quote_history VALUES (?, ?, ?, ?, ?, ?, ?)', rows)
+
+    def history(self, pick):
+        book_key = pick.get('analysis', {}).get('offering_book_key')
+        with self.connect() as db:
+            rows = db.execute('''SELECT quote_at AS timestamp, american_odds, no_vig_probability, observed_at
+                FROM quote_history WHERE event_id = ? AND book_key = ? AND selection = ?
+                ORDER BY quote_at DESC LIMIT 120''', (pick['event_id'], book_key, pick['selection'])).fetchall()
+        return [dict(row) for row in reversed(rows)]
 
     def connect(self):
         db = sqlite3.connect(self.path)

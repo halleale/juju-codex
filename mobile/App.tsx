@@ -187,7 +187,7 @@ function Edgebook() {
           </View>
           <Text style={styles.small}>Kickoff · {date(pick.commence_time)}</Text>
           <Text style={styles.small}>Quote · {date(pick.updated_at)}</Text>
-          <Button title="Why this pick? View full analysis" secondary
+          <Button title="Why this pick? Research & analysis" secondary
             onPress={() => setAnalysisTarget({ pick, source: feed!.source })} />
           <Button title={bets.some(b => b.pick_id === pick.id) ? 'Already tracked' : 'Track recommendation'}
             disabled={disabled || bets.some(b => b.pick_id === pick.id)} onPress={() => { setStake('1'); setSelected(pick); }} />
@@ -239,6 +239,7 @@ function Edgebook() {
             keyboardType="url" editable={!disabled} />
           <Button title="Connect to backend" disabled={disabled || !url.trim()} onPress={() => { void connect('api'); }} />
           <Text style={styles.small}>Your phone must reach this address. Localhost on an iPhone means the phone itself. Use your computer's LAN address on the same trusted Wi-Fi. Provider keys stay on the server.</Text>
+          <Text style={styles.small}>Live research needs an odds key and a separate OpenAI API key on the backend. OpenAI web search runs only when requested in a pick's research report and can incur API usage charges.</Text>
         </View>
         <View style={styles.card}>
           <Text style={styles.pickTitle}>Show the work</Text>
@@ -260,7 +261,8 @@ function Edgebook() {
       <View style={[styles.tabDot, tab === item && { backgroundColor: '#6CF2B1' }]} />
     </Pressable>)}</View>
     <Modal visible={!!analysisTarget} animationType="slide" onRequestClose={() => setAnalysisTarget(null)}>
-      {analysisTarget && <PickAnalysis pick={analysisTarget.pick} source={analysisTarget.source} onClose={() => setAnalysisTarget(null)} />}
+      {analysisTarget && <PickAnalysis pick={analysisTarget.pick} source={analysisTarget.source}
+        apiURL={settings.mode === 'api' ? settings.url : undefined} onClose={() => setAnalysisTarget(null)} />}
     </Modal>
     <Modal visible={!!selected} transparent animationType="slide" onRequestClose={() => { if (!saving) setSelected(null); }}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.overlay}>
